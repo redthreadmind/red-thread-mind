@@ -1,3 +1,10 @@
+output/
+tmp/
+*.mp4
+*.wav
+*.mp3
+*.ass
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
