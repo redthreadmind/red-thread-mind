@@ -1,6 +1,4 @@
 name: produce-video
-permissions:
-  contents: write
 
 on:
   workflow_dispatch:
@@ -18,6 +16,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 concurrency:
   group: produce-video
   cancel-in-progress: false
@@ -27,9 +28,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
+      WHISPER_MODEL: "small"
+      TTS_MODEL: "gemini-3.8-flash-tts"
+      TEXT_MODEL: "gemini-3.8-flash"
+      VOICE_NAME: "Algieba"
       ALLOW_EXPRESSION_TAGS: "true"
       SCHEDULE_MODE: "private"
-      WHISPER_MODEL: "small"
+      CUT_SECONDS: "1.4"
+      MUSIC_TAG: "cinematic"
+      # Set to "true" for test runs that render but never upload. Set back to "false" for real uploads.
+      DRY_RUN: "false"
     steps:
       - uses: actions/checkout@v4
 
@@ -41,8 +49,7 @@ jobs:
       - name: System packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-liberation
-          sudo apt-get install -y ffmpeg fonts-liberation fonts-dejavu-core         
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-dejavu-core
 
       - name: Cache Whisper model
         uses: actions/cache@v4
@@ -58,11 +65,6 @@ jobs:
           TOPIC: ${{ inputs.topic }}
           SCRIPT: ${{ inputs.script }}
           CHAT_ID: ${{ inputs.chat_id }}
-          ALLOW_EXPRESSION_TAGS: "true"
-          SCHEDULE_MODE: "private"
-          VOICE_NAME: "Algieba"
-          CUT_SECONDS: "1.4"
-          MUSIC_TAG: "cinematic"
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
@@ -72,7 +74,8 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
         run: python -m src.main
-              - name: Save upload history
+
+      - name: Save upload history and manifests
         if: success()
         run: |
           git config user.name "rtm-bot"
