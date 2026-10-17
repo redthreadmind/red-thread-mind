@@ -46,8 +46,9 @@ def _rate_from(mime):
 
 
 def _request_chunk(text):
+    # Only the spoken words are sent. No instructions, so nothing gets read aloud.
     body = {
-        "contents": [{"parts": [{"text": f"{config.VOICE_STYLE}\n\n{text}"}]}],
+        "contents": [{"parts": [{"text": text}]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": {
@@ -74,8 +75,8 @@ def _request_chunk(text):
 def synthesize(script, out_path):
     chunks = split_chunks(prepare_script(script))
     if not chunks:
-        raise RuntimeError("Script is empty after cleaning")
-    log.info("TTS chunks: %d", len(chunks))
+        raise RuntimeError("No spoken text found in the script")
+    log.info("TTS chunks: %d, voice: %s", len(chunks), config.VOICE_NAME)
 
     parts, rate, silence = [], None, None
     for i, chunk in enumerate(chunks, 1):

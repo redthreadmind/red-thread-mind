@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from . import config, tts, transcribe, timeline, keywords, clips, typography, render, metadata, youtube, notify
+from .script_clean import clean_script
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("rtm")
@@ -17,8 +18,13 @@ def say(chat_id, text):
 def main():
     config.validate()
     topic = os.environ["TOPIC"].strip()
-    script = os.environ["SCRIPT"].strip()
+    raw_script = os.environ["SCRIPT"].strip()
     chat_id = os.environ["CHAT_ID"].strip()
+
+    script = clean_script(raw_script)
+    if not script:
+        raise SystemExit("No spoken text left after cleaning the script")
+
     W = config.WORKDIR
     os.makedirs(W, exist_ok=True)
 

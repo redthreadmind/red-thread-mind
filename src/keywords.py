@@ -20,10 +20,16 @@ spin: one bold word that rotates (a single strong idea)
 
 def _ask(batch):
     prompt = (
-        "You plan visuals for a faceless motivational YouTube video.\n"
+        "You choose stock footage for a faceless motivational YouTube video.\n"
         "For each line return a JSON array of items with:\n"
         '  "index": the line index,\n'
-        '  "query": 1 or 2 concrete English keywords for stock video search (no names, no brands),\n'
+        '  "query": 2 or 3 plain English words naming something a camera can film: '
+        "a person, an object, an action, or a place.\n"
+        "  Good examples: \"man running sunrise\", \"alarm clock morning\", "
+        "\"person writing journal\", \"gym weights dark\", \"stairs climbing silhouette\", "
+        "\"city walk night\", \"hand coffee cup morning\".\n"
+        "  Never use abstract words like discipline, motivation, success, mindset, growth, "
+        "focus, freedom, or potential. Turn the idea into something visible.\n"
         '  "motion": "left_to_right", "right_to_left", "up", "down", "zoom_in", or "static",\n'
         f'  "style": one of {STYLES}, chosen from this guide:\n{STYLE_GUIDE}\n'
         "Vary the styles. Return only the JSON array.\n\n"
