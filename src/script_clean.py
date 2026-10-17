@@ -1,28 +1,24 @@
 import re
 
-# Labels whose lines are production notes, not narration. These lines are dropped.
 DROP_LABELS = re.compile(
     r"^\s*(visual|visuals|b-?roll|text|text overlay|overlay|kinetic|sfx|sound|"
     r"sound design|music|note|cue|shot|camera|on.?screen)\b[^:]*:", re.I)
 
-# Labels whose text is narration. The label is removed, and the line is kept.
 KEEP_LABELS = re.compile(r"^\s*(hook|voice|voiceover|narration|vo)\b[^:]*:\s*", re.I)
 
-# A heading that marks the start of the spoken script.
 VO_HEADING = re.compile(r"^\s*(voiceover|voice over|narration|spoken script)\s*:?\s*$", re.I)
 
-# A heading that marks the end of the spoken script.
 END_HEADING = re.compile(r"^\s*(cue sheet|visual direction|sound design|kinetic typography)\b", re.I)
 
+# Square and round brackets are production notes. Angle brackets <...> are kept: they are expression tags.
 BRACKETS = re.compile(r"\[[^\]]*\]|\([^)]*\)")
-MARKDOWN = re.compile(r"[*_`#>|]+")
+MARKDOWN = re.compile(r"[*_`#|]+")
 BULLET = re.compile(r"^\s*([-•]|\d+[.)])\s+")
 
 
 def clean_script(raw):
     lines = raw.replace("\r", "").split("\n")
 
-    # If the blueprint has a voiceover section, use only that section.
     starts = [i for i, l in enumerate(lines) if VO_HEADING.match(l)]
     if starts:
         start = starts[0] + 1

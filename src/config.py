@@ -17,10 +17,10 @@ FREESOUND_API_KEY = _get("FREESOUND_API_KEY")
 TTS_MODEL = _get("TTS_MODEL", "gemini-3.8-flash-tts")
 TEXT_MODEL = _get("TEXT_MODEL", "gemini-3.8-flash")
 WHISPER_MODEL = _get("WHISPER_MODEL", "small")
-VOICE_NAME = _get("VOICE_NAME", "Charon")
+VOICE_NAME = _get("VOICE_NAME", "Algieba")
 MUSIC_TAG = _get("MUSIC_TAG", "cinematic")
 
-ALLOW_EXPRESSION_TAGS = _get("ALLOW_EXPRESSION_TAGS", "false").lower() == "true"
+ALLOW_EXPRESSION_TAGS = _get("ALLOW_EXPRESSION_TAGS", "true").lower() == "true"
 SCHEDULE_MODE = _get("SCHEDULE_MODE", "private")
 
 VIDEO_W = 1920
