@@ -2,25 +2,37 @@ import logging
 from .gemini import generate_json
 
 log = logging.getLogger("rtm.keywords")
+STYLES = ["beat", "fluid", "brand", "structural", "cinematic", "lyric", "mixed", "spin"]
 MOTIONS = {"left_to_right", "right_to_left", "up", "down", "zoom_in", "static"}
+
+STYLE_GUIDE = """
+beat: punchy, energetic lines with big words that pop on each beat (action, urgency)
+fluid: smooth lines that drift in the footage's direction (calm reflection)
+brand: one key takeaway phrase with a bold outline (the main point)
+structural: numbered points for steps, lists, or facts (explanations, tips)
+cinematic: slow, serious, reflective lines in serif type (emotion, philosophy)
+lyric: rhythmic lines with a word-by-word color sweep (poetic phrasing)
+mixed: playful mix of fonts and colors (hooks, curiosity, surprise)
+spin: one bold word that rotates (a single strong idea)
+"""
+
 
 def plan_visuals(slices):
     payload = [{"index": s["index"], "text": s["text"]} for s in slices if s["text"]]
     prompt = (
-        "You choose stock footage for a faceless motivational YouTube video.\n"
-        "For each line, return a JSON array. Each item has:\n"
+        "You plan visuals for a faceless motivational YouTube video.\n"
+        "For each line return a JSON array of items with:\n"
         '  "index": the line index,\n'
-        '  "query": 1 or 2 concrete English keywords for stock video search '
-        "(visual, no names, no brand names),\n"
-        '  "motion": the camera or subject movement that footage most naturally shows: '
-        '"left_to_right", "right_to_left", "up", "down", "zoom_in", or "static".\n'
-        "Return only the JSON array.\n\n"
+        '  "query": 1 or 2 concrete English keywords for stock video search (no names, no brands),\n'
+        '  "motion": "left_to_right", "right_to_left", "up", "down", "zoom_in", or "static",\n'
+        f'  "style": one of {STYLES}, chosen from this guide:\n{STYLE_GUIDE}\n'
+        "Vary the styles. Return only the JSON array.\n\n"
         f"Lines: {payload}"
     )
     try:
         items = generate_json(prompt)
     except Exception as e:
-        log.warning("Keyword planning failed, using defaults: %s", e)
+        log.warning("Visual planning failed, using defaults: %s", e)
         items = []
 
     plan = {}
@@ -30,11 +42,23 @@ def plan_visuals(slices):
         except (KeyError, TypeError, ValueError):
             continue
         motion = it.get("motion", "static")
+        style = it.get("style", "")
         plan[idx] = {
             "query": str(it.get("query", "cinematic motivation"))[:60].strip() or "cinematic motivation",
             "motion": motion if motion in MOTIONS else "static",
+            "style": style if style in STYLES else None,
         }
 
     for s in slices:
-        plan.setdefault(s["index"], {"query": "cinematic motivation", "motion": "static"})
+        i = s["index"]
+        entry = plan.setdefault(i, {"query": "cinematic motivation", "motion": "static", "style": None})
+        if not entry["style"]:
+            entry["style"] = STYLES[i % len(STYLES)]
+
+    # Avoid the same style three times in a row.
+    ordered = sorted(plan)
+    for k in range(2, len(ordered)):
+        cur = ordered[k]
+        if plan[cur]["style"] == plan[ordered[k - 1]]["style"] == plan[ordered[k - 2]]["style"]:
+            plan[cur]["style"] = next(s for s in STYLES if s != plan[cur]["style"])
     return plan

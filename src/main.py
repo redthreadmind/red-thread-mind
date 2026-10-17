@@ -30,7 +30,7 @@ def main():
         clip_paths = clips.fetch_all(slices, plan)
 
         log.info("5/7 captions")
-        ass = typography.write_ass(slices, plan, os.path.join(W, "captions.ass"))
+        ass = typography.write_ass(words, slices, plan, os.path.join(W, "captions.ass"))
 
         log.info("6/7 render")
         out = os.path.join(W, "final.mp4")
