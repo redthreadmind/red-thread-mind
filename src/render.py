@@ -58,8 +58,10 @@ def mux(base, ass_path, voice, sfx_times, out_path):
 def build(slices, clip_paths, plan, voice, ass_path, out_path):
     segments = []
     for s in slices:
+        src = clip_paths[s["index"]]
         seg = os.path.join(config.WORKDIR, f"seg_{s['index']:04d}.mp4")
-        make_segment(clip_paths[s["index"]], seg, s["end"] - s["start"])
+        make_segment(src, seg, s["end"] - s["start"])
+        os.remove(src)  # free disk space on the runner
         segments.append(seg)
 
     base = os.path.join(config.WORKDIR, "base.mp4")
