@@ -16,7 +16,7 @@ TTS_MODEL = _get("TTS_MODEL", "gemini-3.8-flash-tts")
 TEXT_MODEL = _get("TEXT_MODEL", "gemini-3.8-flash")
 WHISPER_MODEL = _get("WHISPER_MODEL", "small")
 
-VOICE_NAME = "Charon"
+VOICE_NAME = "Riko"
 VOICE_STYLE = (
     "Read the following as a calm, warm, confident American narrator. "
     "Speak at a steady, slightly slower pace with natural pauses. "
