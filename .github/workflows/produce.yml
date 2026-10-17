@@ -1,0 +1,65 @@
+name: produce-video
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: Video topic
+        required: true
+        type: string
+      script:
+        description: Voiceover script
+        required: true
+        type: string
+      chat_id:
+        description: Telegram chat ID
+        required: true
+        type: string
+
+concurrency:
+  group: produce-video
+  cancel-in-progress: false
+
+jobs:
+  produce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ALLOW_EXPRESSION_TAGS: "true"
+      SCHEDULE_MODE: "private"
+      WHISPER_MODEL: "small"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-liberation
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: whisper-${{ env.WHISPER_MODEL }}
+
+      - name: Install Python packages
+        run: pip install -r requirements.txt
+
+      - name: Produce video
+        env:
+          TOPIC: ${{ inputs.topic }}
+          SCRIPT: ${{ inputs.script }}
+          CHAT_ID: ${{ inputs.chat_id }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        run: python -m src.main
