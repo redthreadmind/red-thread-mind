@@ -12,8 +12,8 @@ YOUTUBE_CLIENT_SECRET = _get("YOUTUBE_CLIENT_SECRET")
 YOUTUBE_REFRESH_TOKEN = _get("YOUTUBE_REFRESH_TOKEN")
 
 # Models: change these here if Google renames them. Check AI Studio.
-TTS_MODEL = _get("TTS_MODEL", "gemini-2.5-flash-preview-tts")
-TEXT_MODEL = _get("TEXT_MODEL", "gemini-2.5-flash")
+TTS_MODEL = _get("TTS_MODEL", "ggemini-3.8-flash-tts")
+TEXT_MODEL = _get("TEXT_MODEL", "gemini-3.8-flash")
 WHISPER_MODEL = _get("WHISPER_MODEL", "small")
 
 VOICE_NAME = "Charon"
