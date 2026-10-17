@@ -55,9 +55,15 @@ jobs:
           TOPIC: ${{ inputs.topic }}
           SCRIPT: ${{ inputs.script }}
           CHAT_ID: ${{ inputs.chat_id }}
+          ALLOW_EXPRESSION_TAGS: "false"
+          SCHEDULE_MODE: "private"
+          VOICE_NAME: "Charon"
+          CUT_SECONDS: "1.4"
+          MUSIC_TAG: "cinematic"
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
+          FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}

@@ -1,17 +1,21 @@
+import logging
 import os
 from . import config
-from .utils import run_ffmpeg, first_file, ff_path
+from .utils import run_ffmpeg, ff_path
 
+log = logging.getLogger("rtm.render")
 W, H, FPS = config.VIDEO_W, config.VIDEO_H, config.FPS
+GRADE = "eq=contrast=1.12:saturation=1.18:brightness=-0.02,vignette=PI/5"
+MAX_SFX = 60
+
 
 def make_segment(src, dst, dur):
-    """Crop/scale one clip to exactly `dur` seconds, no audio."""
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,"
-          f"crop={W}:{H},setsar=1,fps={FPS},"
-          f"tpad=stop_mode=clone:stop_duration={dur:.3f}")
+    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
+          f"fps={FPS},{GRADE},tpad=stop_mode=clone:stop_duration={dur:.3f}")
     run_ffmpeg(["-i", os.path.abspath(src), "-vf", vf, "-t", f"{dur:.3f}", "-an",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
                 "-pix_fmt", "yuv420p", os.path.abspath(dst)])
+
 
 def concat(segments, out_path):
     list_file = os.path.join(config.WORKDIR, "concat.txt")
@@ -21,27 +25,36 @@ def concat(segments, out_path):
     run_ffmpeg(["-f", "concat", "-safe", "0", "-i", os.path.abspath(list_file),
                 "-c", "copy", os.path.abspath(out_path)])
 
-def mux(base, ass_path, voice, sfx_times, out_path):
+
+def _sfx_times(cuts, plan):
+    """Play a whoosh where the caption style changes, capped at MAX_SFX."""
+    times = [c["start"] for prev, c in zip(cuts, cuts[1:])
+             if plan[c["index"]]["style"] != plan[prev["index"]]["style"]]
+    if len(times) > MAX_SFX:
+        step = len(times) / MAX_SFX
+        times = [times[int(i * step)] for i in range(MAX_SFX)]
+    return times
+
+
+def mux(base, ass_path, voice, music, sfx, sfx_times, out_path):
     args = ["-i", os.path.abspath(base), "-i", os.path.abspath(voice)]
-    idx = 2
     fc = [f"[0:v]ass={ff_path(ass_path)}[v]", "[1:a]volume=1.0[va]"]
     mix = ["[va]"]
+    idx = 2
 
-    music = first_file("assets/music", (".mp3", ".wav", ".m4a"))
     if music:
-        args += ["-stream_loop", "-1", "-i", music]
-        fc.append(f"[{idx}:a]volume=0.12[ma]")
+        args += ["-stream_loop", "-1", "-i", os.path.abspath(music)]
+        fc.append(f"[{idx}:a]volume=0.10[ma]")
         mix.append("[ma]")
         idx += 1
 
-    sfx = first_file("assets/sfx", (".wav", ".mp3")) if sfx_times else None
-    if sfx:
-        k = min(len(sfx_times), 20)
-        args += ["-i", sfx]
+    if sfx and sfx_times:
+        k = len(sfx_times)
+        args += ["-i", os.path.abspath(sfx)]
         fc.append(f"[{idx}:a]asplit={k}" + "".join(f"[s{j}]" for j in range(k)))
-        for j, t in enumerate(sfx_times[:k]):
+        for j, t in enumerate(sfx_times):
             ms = int(t * 1000)
-            fc.append(f"[s{j}]adelay={ms}|{ms},volume=0.5[sf{j}]")
+            fc.append(f"[s{j}]adelay={ms}|{ms},volume=0.45[sf{j}]")
             mix.append(f"[sf{j}]")
 
     fc.append("".join(mix) + f"amix=inputs={len(mix)}:duration=first:"
@@ -55,22 +68,19 @@ def mux(base, ass_path, voice, sfx_times, out_path):
              os.path.abspath(out_path)]
     run_ffmpeg(args)
 
-def build(slices, clip_paths, plan, voice, ass_path, out_path):
+
+def build(cuts, clip_paths, plan, voice, ass_path, music, sfx, out_path):
     segments = []
-    for s in slices:
-        src = clip_paths[s["index"]]
-        seg = os.path.join(config.WORKDIR, f"seg_{s['index']:04d}.mp4")
-        make_segment(src, seg, s["end"] - s["start"])
-        os.remove(src)  # free disk space on the runner
+    for c in cuts:
+        seg = os.path.join(config.WORKDIR, f"seg_{c['index']:05d}.mp4")
+        make_segment(clip_paths[c["index"]], seg, c["end"] - c["start"])
         segments.append(seg)
 
     base = os.path.join(config.WORKDIR, "base.mp4")
     concat(segments, base)
+    for s in segments:
+        os.remove(s)
 
-    # Whoosh SFX at each point where the motion direction changes.
-    sfx_times = [
-        s["start"] for s in slices[1:]
-        if plan[s["index"]]["motion"] != plan[s["index"] - 1]["motion"]
-    ]
-    mux(base, ass_path, voice, sfx_times, out_path)
+    mux(base, ass_path, voice, music, sfx, _sfx_times(cuts, plan), out_path)
+    log.info("Render complete: %s", out_path)
     return out_path

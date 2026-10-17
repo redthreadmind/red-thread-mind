@@ -2,36 +2,30 @@ import logging
 from .gemini import generate_json
 
 log = logging.getLogger("rtm.keywords")
-STYLES = ["beat", "fluid", "brand", "structural", "cinematic", "lyric", "mixed", "spin"]
+STYLES = ["punch", "slide", "outline", "flash"]
 MOTIONS = {"left_to_right", "right_to_left", "up", "down", "zoom_in", "static"}
-BATCH = 40
+BATCH = 60
 
-STYLE_GUIDE = """
-beat: punchy, energetic lines with big words that pop on each beat (action, urgency)
-fluid: smooth lines that drift in the footage's direction (calm reflection)
-brand: one key takeaway phrase with a bold outline (the main point)
-structural: numbered points for steps, lists, or facts (explanations, tips)
-cinematic: slow, serious, reflective lines in serif type (emotion, philosophy)
-lyric: rhythmic lines with a word-by-word color sweep (poetic phrasing)
-mixed: playful mix of fonts and colors (hooks, curiosity, surprise)
-spin: one bold word that rotates (a single strong idea)
+GUIDE = """
+punch: one or two bold words that pop in with a bounce (commands, strong statements)
+slide: words that travel in the direction the footage moves (action, movement)
+outline: a short phrase in a red-outlined box (the single key idea)
+flash: one large yellow word (shock, emphasis)
 """
 
 
 def _ask(batch):
     prompt = (
-        "You choose stock footage for a faceless motivational YouTube video.\n"
-        "For each line return a JSON array of items with:\n"
+        "You choose stock video for a fast-cut motivational YouTube video.\n"
+        "Each line is about 1.4 seconds of narration. For each line return a JSON array with:\n"
         '  "index": the line index,\n'
-        '  "query": 2 or 3 plain English words naming something a camera can film: '
-        "a person, an object, an action, or a place.\n"
-        "  Good examples: \"man running sunrise\", \"alarm clock morning\", "
-        "\"person writing journal\", \"gym weights dark\", \"stairs climbing silhouette\", "
-        "\"city walk night\", \"hand coffee cup morning\".\n"
-        "  Never use abstract words like discipline, motivation, success, mindset, growth, "
-        "focus, freedom, or potential. Turn the idea into something visible.\n"
+        '  "query": 1 to 3 English words naming what a camera can film for this exact line. '
+        "Use the most concrete visible noun or action from the line, in the same words where "
+        'possible. Examples: "run" becomes "man running", "wake up" becomes "alarm clock morning", '
+        '"push" becomes "man pushing wall". Never use abstract words such as discipline, '
+        "motivation, success, mindset, focus, or growth.\n"
         '  "motion": "left_to_right", "right_to_left", "up", "down", "zoom_in", or "static",\n'
-        f'  "style": one of {STYLES}, chosen from this guide:\n{STYLE_GUIDE}\n'
+        f'  "style": one of {STYLES}, chosen from this guide:\n{GUIDE}\n'
         "Vary the styles. Return only the JSON array.\n\n"
         f"Lines: {batch}"
     )
@@ -43,8 +37,8 @@ def _ask(batch):
         return []
 
 
-def plan_visuals(slices):
-    lines = [{"index": s["index"], "text": s["text"]} for s in slices if s["text"]]
+def plan_visuals(cuts):
+    lines = [{"index": c["index"], "text": c["text"]} for c in cuts if c["text"]]
     items = []
     for i in range(0, len(lines), BATCH):
         items += _ask(lines[i:i + BATCH])
@@ -58,13 +52,13 @@ def plan_visuals(slices):
         motion = it.get("motion", "static")
         style = it.get("style", "")
         plan[idx] = {
-            "query": str(it.get("query", "cinematic motivation"))[:60].strip() or "cinematic motivation",
+            "query": str(it.get("query", "cinematic motivation"))[:50].strip() or "cinematic motivation",
             "motion": motion if motion in MOTIONS else "static",
             "style": style if style in STYLES else None,
         }
 
-    for s in slices:
-        i = s["index"]
+    for c in cuts:
+        i = c["index"]
         entry = plan.setdefault(i, {"query": "cinematic motivation", "motion": "static", "style": None})
         if not entry["style"]:
             entry["style"] = STYLES[i % len(STYLES)]

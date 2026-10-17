@@ -6,100 +6,71 @@ import requests
 from . import config
 
 log = logging.getLogger("rtm.clips")
+MIN_CLIP_SECONDS = 2.0
 
 FALLBACK_QUERIES = [
     "man running sunrise",
     "person walking city night",
     "alarm clock morning",
-    "person writing journal",
-    "mountain climb sunrise",
+    "man climbing stairs",
     "gym workout man",
+    "mountain climb sunrise",
     "ocean waves slow motion",
 ]
 
 _search_cache = {}
-_disabled = set()
+_pixabay_disabled = False
 
 
 class RateLimited(Exception):
     pass
 
 
-def _get(url, headers=None, params=None):
+def _get(url, params):
     for attempt in range(3):
-        r = requests.get(url, headers=headers, params=params, timeout=30)
+        r = requests.get(url, params=params, timeout=30)
         if r.status_code == 429:
-            time.sleep(20 * (attempt + 1))
+            time.sleep(30 * (attempt + 1))
             continue
         r.raise_for_status()
         return r.json()
     raise RateLimited(url)
 
 
-def _pixabay(query):
-    if not config.PIXABAY_API_KEY:
+def _search(query):
+    global _pixabay_disabled
+    if query in _search_cache:
+        return _search_cache[query]
+    if _pixabay_disabled or not config.PIXABAY_API_KEY:
         return []
+
     time.sleep(0.7)  # Pixabay allows about 100 requests per minute
-    data = _get("https://pixabay.com/api/videos/",
-                params={"key": config.PIXABAY_API_KEY, "q": query,
-                        "per_page": 20, "safesearch": "true", "order": "popular"})
+    try:
+        data = _get("https://pixabay.com/api/videos/",
+                    {"key": config.PIXABAY_API_KEY, "q": query,
+                     "per_page": 30, "safesearch": "true", "order": "popular"})
+    except RateLimited:
+        log.warning("Pixabay rate limit reached; the rest of this run will use cached results only")
+        _pixabay_disabled = True
+        return []
+    except Exception as e:
+        log.warning("Pixabay failed for %r: %s", query, e)
+        return []
+
     out = []
     for hit in data.get("hits", []):
         videos = hit.get("videos", {})
         f = videos.get("large") or videos.get("medium") or {}
-        if f.get("url") and f.get("width", 0) >= 1280:
+        if f.get("url") and f.get("width", 0) >= 1280 and hit.get("duration", 0) >= MIN_CLIP_SECONDS:
             out.append({
                 "id": f"px-{hit['id']}",
                 "url": f["url"],
-                "duration": hit.get("duration", 0),
-                "w": f.get("width", 0),
+                "duration": hit["duration"],
+                "w": f["width"],
                 "tags": hit.get("tags", ""),
             })
+    _search_cache[query] = out
     return out
-
-
-def _pexels(query):
-    if not config.PEXELS_API_KEY:
-        return []
-    data = _get("https://api.pexels.com/videos/search",
-                headers={"Authorization": config.PEXELS_API_KEY},
-                params={"query": query, "per_page": 20, "orientation": "landscape"})
-    out = []
-    for v in data.get("videos", []):
-        files = [f for f in v.get("video_files", [])
-                 if f.get("file_type") == "video/mp4" and f.get("width", 0) >= 1280]
-        if not files:
-            continue
-        best = max(files, key=lambda f: f.get("width", 0))
-        out.append({
-            "id": f"px2-{v['id']}",
-            "url": best["link"],
-            "duration": v.get("duration", 0),
-            "w": best.get("width", 0),
-            "tags": v.get("url", ""),  # the page address contains the subject words
-        })
-    return out
-
-
-SOURCES = [("pixabay", _pixabay), ("pexels", _pexels)]
-
-
-def _search(query):
-    if query in _search_cache:
-        return _search_cache[query]
-    results = []
-    for name, fn in SOURCES:
-        if name in _disabled:
-            continue
-        try:
-            results += fn(query)
-        except RateLimited:
-            log.warning("%s rate limit reached; skipping it for the rest of this run", name)
-            _disabled.add(name)
-        except Exception as e:
-            log.warning("%s failed for %r: %s", name, query, e)
-    _search_cache[query] = results
-    return results
 
 
 def _words(text):
@@ -110,14 +81,14 @@ def _score(clip, query):
     return len(_words(query) & _words(clip.get("tags", "")))
 
 
-def _pick(query, used, strict=True):
-    cands = [c for c in _search(query) if c["id"] not in used and c["duration"] >= 1.5]
+def _pick(query, used, strict, allow_reuse=False):
+    cands = [c for c in _search(query) if allow_reuse or c["id"] not in used]
     if not cands:
         return None
-    cands.sort(key=lambda c: (_score(c, query), c.get("w", 0)), reverse=True)
+    cands.sort(key=lambda c: (_score(c, query), c["w"]), reverse=True)
     best = cands[0]
     if strict and _score(best, query) == 0:
-        return None  # nothing relevant for this query, try another one
+        return None
     return best
 
 
@@ -129,39 +100,39 @@ def _download(url, dest):
                 f.write(chunk)
 
 
-def fetch_all(slices, plan):
+def fetch_all(cuts, plan):
+    """Return {cut_index: local_clip_path}. Prefers unused, relevant clips, then reuses if needed."""
     clip_dir = os.path.join(config.WORKDIR, "clips")
     os.makedirs(clip_dir, exist_ok=True)
+
     used, result = set(), {}
-    fallbacks = 0
+    counts = {"exact": 0, "fallback": 0, "reused": 0}
 
-    for s in slices:
-        query = plan[s["index"]]["query"]
+    for c in cuts:
+        q = plan[c["index"]]["query"]
+        attempts = [(q, True, False, "exact")]
+        attempts += [(f, True, False, "fallback") for f in FALLBACK_QUERIES]
+        attempts += [(q, False, False, "fallback")]
+        attempts += [(f, False, False, "fallback") for f in FALLBACK_QUERIES]
+        attempts += [(q, False, True, "reused")]
+        attempts += [(f, False, True, "reused") for f in FALLBACK_QUERIES]
 
-        pick = _pick(query, used, strict=True)
+        pick, label = None, None
+        for query, strict, reuse, lab in attempts:
+            pick = _pick(query, used, strict, allow_reuse=reuse)
+            if pick:
+                label = lab
+                break
         if not pick:
-            for fb in FALLBACK_QUERIES:
-                pick = _pick(fb, used, strict=True)
-                if pick:
-                    fallbacks += 1
-                    break
+            raise RuntimeError(f"No Pixabay clip found for cut {c['index']} ({q})")
 
-        if not pick:
-            # Last resort: accept any clip so the video always completes.
-            for fb in [query] + FALLBACK_QUERIES:
-                pick = _pick(fb, used, strict=False)
-                if pick:
-                    fallbacks += 1
-                    break
-
-        if not pick:
-            raise RuntimeError(f"No free clip found for line {s['index']} ({query})")
-
+        counts[label] += 1
         used.add(pick["id"])
         dest = os.path.join(clip_dir, pick["id"] + ".mp4")
         if not os.path.exists(dest):
             _download(pick["url"], dest)
-        result[s["index"]] = dest
+        result[c["index"]] = dest
 
-    log.info("Clips: %d lines, %d used a fallback query", len(result), fallbacks)
+    log.info("Clips: %d cuts, exact %d, fallback %d, reused %d",
+             len(result), counts["exact"], counts["fallback"], counts["reused"])
     return result
